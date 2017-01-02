@@ -3,6 +3,9 @@
 
 from __future__ import division
 import logging
+import time
+
+# pylint: disable=C0103
 
 
 # Default address
@@ -89,6 +92,12 @@ class I2CDevice(object):
             register, register + 1, value, result)
         return result
 
+    def write_int8(self, register, value):
+        self.bus.write_byte_data(self.address, register, value)
+        self.logger.debug(
+            "Write [0x%02X] <= 0x%02X <= %d as int8",
+            register, value, value)
+
 
 class BMP180(I2CDevice):
 
@@ -99,6 +108,9 @@ class BMP180(I2CDevice):
 
         self.verify()
         self.load_calibration()
+
+        self.temperature = None
+        self.pressure = None
 
     def verify(self):
         chip_id = self.read_uint8(BMP180_CHIP_ID)
@@ -138,8 +150,89 @@ class BMP180(I2CDevice):
             self.logger.debug(
                 "Calibration register %s = %s", key, self.calibration[key])
 
+    def _read_raw_temperature(self):
+        self.write_int8(BMP180_CONTROL, BMP180_READTEMPCMD)
+        time.sleep(0.005)
 
-# pylint: disable=C0103
+        raw = self.read_uint16(BMP180_TEMPDATA)
+
+        self.logger.debug('Raw temperature is 0x%04X (%d)', raw & 0xFFFF, raw)
+        return raw
+
+    def _read_raw_pressure(self):
+        self.write_int8(
+            BMP180_CONTROL, BMP180_READPRESSURECMD + (self.mode << 6))
+
+        delay_values = {
+            BMP180_ULTRALOWPOWER: 0.005,
+            BMP180_STANDARD: 0.008,
+            BMP180_HIGHRES: 0.014,
+            BMP180_ULTRAHIGHRES: 0.026,
+        }
+        time.sleep(delay_values[self.mode])
+
+        msb = self.read_uint8(BMP180_PRESSUREDATA)
+        lsb = self.read_uint8(BMP180_PRESSUREDATA + 1)
+        xlsb = self.read_uint8(BMP180_PRESSUREDATA + 2)
+        raw = ((msb << 16) + (lsb << 8) + xlsb) >> (8 - self.mode)
+
+        self.logger.debug('Raw pressure is 0x%04X (%d)', raw & 0xFFFF, raw)
+        return raw
+
+    def read_temperature(self):
+        UT = self._read_raw_temperature()
+        X1 = ((UT - self.calibration['AC6']) * self.calibration['AC5']) >> 15
+        X2 = (self.calibration['MC'] << 11) // (X1 + self.calibration['MD'])
+        B5 = X1 + X2
+        temperature = ((B5 + 8) >> 4) / 10.0
+
+        self.logger.debug('Calibrated temperature is %0.2f C', temperature)
+        return temperature
+
+    def read_temperature_and_pressure(self):
+        UT = self._read_raw_temperature()
+        UP = self._read_raw_pressure()
+
+        X1 = ((UT - self.calibration['AC6']) * self.calibration['AC5']) >> 15
+        X2 = (self.calibration['MC'] << 11) // (X1 + self.calibration['MD'])
+        B5 = X1 + X2
+        temperature = ((B5 + 8) >> 4) / 10.0
+
+        B6 = B5 - 4000
+        X1 = (self.calibration['B2'] * (B6 * B6) >> 12) >> 11
+        X2 = (self.calibration['AC2'] * B6) >> 11
+        X3 = X1 + X2
+        B3 = (((self.calibration['AC1'] * 4 + X3) << self.mode) + 2) // 4
+        X1 = (self.calibration['AC3'] * B6) >> 13
+        X2 = (self.calibration['B1'] * ((B6 * B6) >> 12)) >> 16
+        X3 = ((X1 + X2) + 2) >> 2
+        B4 = (self.calibration['AC4'] * (X3 + 32768)) >> 15
+        B7 = (UP - B3) * (50000 >> self.mode)
+
+        p = 0
+        if B7 < 0x80000000:
+            p = (B7 * 2) // B4
+        else:
+            p = (B7 // B4) * 2
+        X1 = (p >> 8) * (p >> 8)
+        X1 = (X1 * 3038) >> 16
+        X2 = (-7357 * p) >> 16
+        pressure = p + ((X1 + X2 + 3791) >> 4)
+
+        self.logger.debug('Calibrated temperature is %0.2f C', temperature)
+        self.logger.debug('Calibrated pressure is %d Pa', pressure)
+
+        return (temperature, pressure)
+
+
+def pressure_to_altitude(pressure, sealevel_pa=101325.0):
+    altitude = 44330.0 * (1.0 - pow(pressure / sealevel_pa, (1.0 / 5.255)))
+    return altitude
+
+
+def pressure_Pa_to_mmHg(pa):
+    return pa * 760 / 101325
+
 
 if __name__ == "__main__":
     from smbus import SMBus
@@ -153,6 +246,13 @@ if __name__ == "__main__":
         bus.open(1)
 
         sensor = BMP180(bus, bus_id=1, little_endian=False)
+        temp, pa = sensor.read_temperature_and_pressure()
+        alt = pressure_to_altitude(pa)
+        mmHg = pressure_Pa_to_mmHg(pa)
+
+        print "Temperature is %0.2f C" % (temp)
+        print "Pressure is %d Pa (%0.2f mmHg)" % (pa, mmHg)
+        print "Altitude (based on pressure) is %d m" % (alt)
 
     finally:
         bus.close()
