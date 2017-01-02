@@ -31,6 +31,8 @@ BMP180_CONTROL = 0xF4
 BMP180_TEMPDATA = 0xF6
 BMP180_PRESSUREDATA = 0xF6
 
+BMP180_CHIP_ID_VALUE = 0x55
+
 # Commands
 BMP180_READTEMPCMD = 0x2E
 BMP180_READPRESSURECMD = 0x34
@@ -38,10 +40,7 @@ BMP180_READPRESSURECMD = 0x34
 
 class I2CDevice(object):
 
-    def __init__(self, bus, address, little_endian=False):
-        self.logger = logging.getLogger(
-            "{0}, I2C[{1}]:{2:#0x}".format(
-                self.__class__.__name__, 1, address))
+    def __init__(self, bus, address, bus_id='?', little_endian=False):
         self.bus = bus
         self.address = address
 
@@ -50,10 +49,14 @@ class I2CDevice(object):
         else:
             self._read16 = self._read16_big_endian
 
+        self.logger = logging.getLogger(
+            "{0}, I2C[{1}]:{2:#0x}".format(
+                self.__class__.__name__, bus_id, address))
+
     def read_uint8(self, register):
         value = self.bus.read_byte_data(self.address, register)
         self.logger.debug(
-            "Read [0x%02X] => 0x%04X => %d as uint8",
+            "Read [0x%02X] => 0x%02X => %d as uint8",
             register, value, value)
         return value
 
@@ -94,10 +97,22 @@ class BMP180(I2CDevice):
         super(BMP180, self).__init__(bus, address, **kwargs)
         self.mode = mode
 
-        chip_id = self.read_uint8(BMP180_CHIP_ID)
-        assert chip_id == 0x55
-
+        self.verify()
         self.load_calibration()
+
+    def verify(self):
+        chip_id = self.read_uint8(BMP180_CHIP_ID)
+
+        is_bmp180 = chip_id == BMP180_CHIP_ID_VALUE
+
+        if is_bmp180:
+            self.logger.debug('Bosch BMP180 sensor found: chip id is 0x55')
+        else:
+            self.logger.warning(
+                'No Bosch BMP180 sensor found: chip id is 0x%02X, '
+                'should be 0x%02X', chip_id, BMP180_CHIP_ID_VALUE)
+
+        return is_bmp180
 
     def load_calibration(self):
         data = [
@@ -127,7 +142,7 @@ class BMP180(I2CDevice):
 # pylint: disable=C0103
 
 if __name__ == "__main__":
-    from smbus2 import SMBus
+    from smbus import SMBus
 
     logging.basicConfig(
         level=logging.DEBUG,
@@ -137,7 +152,7 @@ if __name__ == "__main__":
         bus = SMBus()
         bus.open(1)
 
-        sensor = BMP180(bus, little_endian=False)
+        sensor = BMP180(bus, bus_id=1, little_endian=False)
 
     finally:
         bus.close()
