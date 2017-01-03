@@ -5,7 +5,7 @@ from __future__ import division
 import logging
 import time
 
-from i2c_device import I2CDevice
+from rpisensors.i2c_device import I2CDevice
 
 
 # pylint: disable=C0103

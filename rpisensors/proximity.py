@@ -3,30 +3,11 @@
 
 import logging
 
-from smbus2 import SMBus
+from rpisensors.i2c_device import I2CDevice
 
 
 # Default address
 VL6180X_I2CADDRESS = 0x29
-
-
-class I2CDevice(object):
-
-    def __init__(self, bus, address):
-        self.bus = bus
-        self.address = address
-
-    def read_uint8(self, register):
-        return self.bus.read_byte_data(self.address, register)
-
-    def read_uint16(self, register):
-        return self.bus.read_word_data(self.address, register)
-
-    def read_int16(self, register):
-        value = self.read_uint16(register)
-        if value >= 0x8000:
-            value = -(66635 - value + 1)
-        return value
 
 
 class VL6180X(I2CDevice):
@@ -40,6 +21,8 @@ class VL6180X(I2CDevice):
 # pylint: disable=C0103
 
 if __name__ == "__main__":
+    from smbus import SMBus
+
     logging.basicConfig(
         level=logging.DEBUG,
         format="%(asctime)s %(name)-30s %(levelname)-8s %(message)s")
