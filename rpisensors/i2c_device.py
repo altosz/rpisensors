@@ -3,12 +3,15 @@
 
 import logging
 
+from rpisensors.smbus_wrapper import SMBusWrapper
+
 
 class I2CDevice(object):
 
-    def __init__(self, bus, address, bus_id='?', little_endian=False):
-        self.bus = bus
+    def __init__(self, bus_id, address, little_endian=False):
+        self.bus_id = bus_id
         self.address = address
+        self.bus = SMBusWrapper.open(bus_id)
 
         if little_endian:
             self._read16 = self._read16_little_endian
@@ -22,7 +25,7 @@ class I2CDevice(object):
     def read_uint8(self, register):
         value = self.bus.read_byte_data(self.address, register)
         self.logger.debug(
-            "Read [0x%02X] => 0x%02X => %d as uint8",
+            "Read  [0x%02X] => 0x%02X (%d as uint8)",
             register, value, value)
         return value
 
@@ -39,7 +42,7 @@ class I2CDevice(object):
     def read_uint16(self, register):
         value = self._read16(register)
         self.logger.debug(
-            "Read [0x%02X, 0x%02X] => 0x%04X => %d as uint16",
+            "Read  [0x%02X, 0x%02X] => 0x%04X (%d as uint16)",
             register, register + 1, value, value)
         return value
 
@@ -51,12 +54,12 @@ class I2CDevice(object):
             result -= 65536
 
         self.logger.debug(
-            "Read [0x%02X, 0x%02X] => 0x%04X => %d as int16",
+            "Read  [0x%02X, 0x%02X] => 0x%04X (%d as int16)",
             register, register + 1, value, result)
         return result
 
     def write_int8(self, register, value):
         self.bus.write_byte_data(self.address, register, value)
         self.logger.debug(
-            "Write [0x%02X] <= 0x%02X <= %d as int8",
+            "Write [0x%02X] <= 0x%02X (%d as int8)",
             register, value, value)
