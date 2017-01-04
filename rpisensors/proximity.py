@@ -14,7 +14,20 @@ from rpisensors.eeprom16 import Eeprom16
 VL6180X_I2CADDRESS = 0x29
 
 VL_IDENTIFICATION_MODEL_ID = 0x000
-VL_FRESH_OUT_OF_RESET = 0x016
+VL_SYSTEM_INTERRUPT_CONFIG_GPIO = 0x014
+VL_SYSTEM_INTERRUPT_CLEAR = 0x015
+VL_SYSTEM_FRESH_OUT_OF_RESET = 0x016
+VL_SYSTEM_MODE_GPIO1 = 0x011
+VL_SYSRANGE_START = 0x018
+VL_SYSRANGE_INTERMEASUREMENT_PERIOD = 0x01B
+VL_SYSRANGE_VHV_RECALIBRATE = 0x02E
+VL_SYSRANGE_VHV_REPEAT_RATE = 0x031
+VL_SYSALS_INTERMEASUREMENT_PERIOD = 0x03E
+VL_SYSALS_ANALOGUE_GAIN = 0x03F
+VL_SYSALS_INTEGRATION_PERIOD = 0x040
+VL_RESULT_INTERRUPT_STATUS_GPIO = 0x04F
+VL_RESULT_RANGE_VAL = 0x062
+VL_READOUT_AVERAGING_SAMPLE_PERIOD = 0x10A
 
 
 VL_IDENTIFICATION_MODEL_ID_VALUE = 0xB4
@@ -40,11 +53,14 @@ class VL6180X(Eeprom16):
                 'No VL6180X sensor found: chip id is 0x%02X, '
                 'should be 0x%02X', chip_id, VL_IDENTIFICATION_MODEL_ID_VALUE)
 
-    def prepare(self):
-        status = self.read_byte(VL_FRESH_OUT_OF_RESET)
+    def prepare(self, force=False):
+        status = self.read_byte(VL_SYSTEM_FRESH_OUT_OF_RESET)
 
         if status == 1:
             self.logger.debug("System is fresh out of reset")
+
+        if status == 1 or force is True:
+            self.logger.debug("Setting sensor parameters, force = %s", force)
 
             self.write_byte(0x0207, 0x01)
             self.write_byte(0x0208, 0x01)
@@ -77,37 +93,58 @@ class VL6180X(Eeprom16):
             self.write_byte(0x01a7, 0x1f)
             self.write_byte(0x0030, 0x00)
 
-            self.write_byte(0x0011, 0x10)
-            self.write_byte(0x010a, 0x30)
-            self.write_byte(0x003f, 0x46)
-            self.write_byte(0x0031, 0xFF)
-            self.write_byte(0x0040, 0x63)
-            self.write_byte(0x002e, 0x01)
-            self.write_byte(0x001b, 0x09)
-            self.write_byte(0x003e, 0x31)
-            self.write_byte(0x0014, 0x24)
+            # Enables polling for ‘New Sample ready’ when measurement completes
+            self.write_byte(VL_SYSTEM_MODE_GPIO1, 0x10)
 
-            self.write_byte(0x016, 0x00)
+            # Set the averaging sample period (compromise between lower noise
+            # and increased execution time)
+            self.write_byte(VL_READOUT_AVERAGING_SAMPLE_PERIOD, 0x30)
+
+            # Set the light and dark gain (upper nibble).
+            # Dark gain should not be changed.
+            self.write_byte(VL_SYSALS_ANALOGUE_GAIN, 0x46)
+
+            # Set the number of range measurements after which auto calibration
+            # of system is performed
+            self.write_byte(VL_SYSRANGE_VHV_REPEAT_RATE, 0xFF)
+
+            # Set ALS integration time to 100ms
+            self.write_byte(VL_SYSALS_INTEGRATION_PERIOD, 0x63)
+
+            # Perform a single temperature calibratio of the ranging sensor
+            self.write_byte(VL_SYSRANGE_VHV_RECALIBRATE, 0x01)
+
+            # Set default ranging inter-measurement period to 100ms
+            self.write_byte(VL_SYSRANGE_INTERMEASUREMENT_PERIOD, 0x09)
+
+            # Set default ALS inter-measurement period to 500ms
+            self.write_byte(VL_SYSALS_INTERMEASUREMENT_PERIOD, 0x31)
+
+            # Configure interrupt on ‘New Sample Ready threshold event’
+            self.write_byte(VL_SYSTEM_INTERRUPT_CONFIG_GPIO, 0x24)
+
+            self.write_byte(VL_SYSTEM_FRESH_OUT_OF_RESET, 0x00)
 
     def read_distance(self):
-        self.write_byte(0x18, 0x01)
+        self.write_byte(VL_SYSRANGE_START, 0x01)
 
         value = None
         i = 0
         while i < 10:
             i += 1
 
-            status = self.read_byte(0x4F)
+            status = self.read_byte(VL_RESULT_INTERRUPT_STATUS_GPIO)
             range_status = status & 0x07
 
             if range_status == 0x04:
-                value = self.read_byte(0x62)
+                value = self.read_byte(VL_RESULT_RANGE_VAL)
                 break
 
             time.sleep(0.2)
 
-        self.write_byte(0x15, 0x07)
+        self.write_byte(VL_SYSTEM_INTERRUPT_CLEAR, 0x07)
 
+        self.logger.debug("Distance is %d mm", value)
         return value
 
 
