@@ -7,20 +7,19 @@ Supported sensors and measurements:
 
 1. Bosch BMP180
 	
-	* temperature (Celsius degrees)
-	* pressure (Pa)
+  * temperature (Celsius degrees)
+  * pressure (Pa)
 
 2. ST VL6180X
 
-	* distance (mm)
-	* ambient light (lux)
+  * distance (mm)
+  * ambient light (lux)
 
 
 Dependencies
 ------------
 
 * smbus-cffi
-::
 
   See https://github.com/bivab/smbus-cffi/blob/master/README.rst for install instructions.
 
@@ -43,11 +42,12 @@ Installation
   git clone https://github.com/altosz/rpisensors.git
   python setup.py install
 
- Tests
- -----
+Tests
+-----
 
 If you have a sensor connected to Raspberry PI 3 (on I2C bus 1), you may run
-  
+::
+
   python -m rpisensors.bmp180
   python -m rpisensors.proximity
 
