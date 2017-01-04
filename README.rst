@@ -5,16 +5,8 @@ This Python module is a collection of classes to enable Raspberry PI sensors sup
 
 Supported sensors and measurements:
 
-1. Bosch BMP180
-	
-  * temperature (Celsius degrees)
-  * pressure (Pa)
-
-2. ST VL6180X
-
-  * distance (mm)
-  * ambient light (lux)
-
+1. Bosch BMP180: temperature (Celsius degrees), pressure (Pa)
+2. ST VL6180X: distance (mm), ambient light (lux)
 
 Dependencies
 ------------
@@ -42,7 +34,7 @@ Installation
   git clone https://github.com/altosz/rpisensors.git
   python setup.py install
 
-Tests
+Usage
 -----
 
 If you have a sensor connected to Raspberry PI 3 (on I2C bus 1), you may run
@@ -83,4 +75,4 @@ This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; version 2 of the License.
 
-See LICENSE for full license text
+See LICENSE for full license text.
