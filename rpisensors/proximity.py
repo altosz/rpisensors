@@ -22,15 +22,25 @@ VL_SYSRANGE_START = 0x018
 VL_SYSRANGE_INTERMEASUREMENT_PERIOD = 0x01B
 VL_SYSRANGE_VHV_RECALIBRATE = 0x02E
 VL_SYSRANGE_VHV_REPEAT_RATE = 0x031
+VL_SYSALS_START = 0x038
 VL_SYSALS_INTERMEASUREMENT_PERIOD = 0x03E
 VL_SYSALS_ANALOGUE_GAIN = 0x03F
 VL_SYSALS_INTEGRATION_PERIOD = 0x040
 VL_RESULT_INTERRUPT_STATUS_GPIO = 0x04F
+VL_RESULT_ALS_VAL = 0x050
 VL_RESULT_RANGE_VAL = 0x062
 VL_READOUT_AVERAGING_SAMPLE_PERIOD = 0x10A
 
-
 VL_IDENTIFICATION_MODEL_ID_VALUE = 0xB4
+
+VL_ALS_GAIN_1 = 0x06
+VL_ALS_GAIN_1_25 = 0x05
+VL_ALS_GAIN_1_67 = 0x04
+VL_ALS_GAIN_2_5 = 0x03
+VL_ALS_GAIN_5 = 0x02
+VL_ALS_GAIN_10 = 0x01
+VL_ALS_GAIN_20 = 0x00
+VL_ALS_GAIN_40 = 0x07
 
 
 class VL6180X(Eeprom16):
@@ -102,7 +112,7 @@ class VL6180X(Eeprom16):
 
             # Set the light and dark gain (upper nibble).
             # Dark gain should not be changed.
-            self.write_byte(VL_SYSALS_ANALOGUE_GAIN, 0x46)
+            self.write_byte(VL_SYSALS_ANALOGUE_GAIN, 0x40 | VL_ALS_GAIN_1)
 
             # Set the number of range measurements after which auto calibration
             # of system is performed
@@ -135,18 +145,78 @@ class VL6180X(Eeprom16):
 
             status = self.read_byte(VL_RESULT_INTERRUPT_STATUS_GPIO)
             range_status = status & 0x07
-
             if range_status == 0x04:
                 value = self.read_byte(VL_RESULT_RANGE_VAL)
                 break
 
-            time.sleep(0.2)
+            time.sleep(0.1)
 
         self.write_byte(VL_SYSTEM_INTERRUPT_CLEAR, 0x07)
 
         self.logger.debug("Distance is %d mm", value)
         return value
 
+    def read_lux(self, gain=VL_ALS_GAIN_1):
+        reg = self.read_byte(VL_SYSTEM_INTERRUPT_CONFIG_GPIO)
+        reg = reg & (~0x38)
+        reg = reg | (0x4 << 3)
+        self.write_byte(VL_SYSTEM_INTERRUPT_CONFIG_GPIO, reg)
+
+        integration_time = 100
+        self.write_byte(VL_SYSALS_INTEGRATION_PERIOD, 0)
+        self.write_byte(VL_SYSALS_INTEGRATION_PERIOD + 1, integration_time)
+
+        if gain > VL_ALS_GAIN_40:
+            gain = VL_ALS_GAIN_40
+        self.write_byte(VL_SYSALS_ANALOGUE_GAIN, 0x40 | gain)
+
+        # start ALS
+        self.write_byte(VL_SYSALS_START, 0x01)
+
+        value = None
+        i = 0
+        while i < 10:
+            i += 1
+
+            status = self.read_byte(VL_RESULT_INTERRUPT_STATUS_GPIO)
+            als_status = (status >> 3) & 0x07
+            if als_status == 0x04:
+                # reg = Eeprom16.address_to_bytes(VL_RESULT_ALS_VAL)
+                # self.bus.write_byte_data(self.address, *reg)
+                # data = self.bus.read_i2c_block_data(self.address, reg[0], 2)
+                # print data
+
+                value = self.read_word(VL_RESULT_ALS_VAL)
+                break
+
+            time.sleep(0.1)
+
+        self.write_byte(VL_SYSTEM_INTERRUPT_CLEAR, 0x07)
+
+        if value is None:
+            self.logger.warning("Failed to get lux value")
+            return None
+
+        # The factory calibrated ALS lux resolution is 0.32 lux/count
+        # for an analog gain of 1 & 100ms integration time (calibrated
+        # without glass).
+        lux = value * 0.32
+
+        analog_gain = {
+            VL_ALS_GAIN_1: 1.0,
+            VL_ALS_GAIN_1_25: 1.25,
+            VL_ALS_GAIN_1_67: 1.67,
+            VL_ALS_GAIN_2_5: 2.5,
+            VL_ALS_GAIN_5: 5.0,
+            VL_ALS_GAIN_10: 10.0,
+            VL_ALS_GAIN_20: 20.0,
+            VL_ALS_GAIN_40: 40.0,
+        }.get(gain)
+
+        lux = lux * 100 / (analog_gain * integration_time)
+        self.logger.debug("Lux is %d", lux)
+
+        return lux
 
 if __name__ == "__main__":
     logging.basicConfig(
@@ -154,5 +224,5 @@ if __name__ == "__main__":
         format="%(name)-20s %(levelname)-8s %(message)s")
 
     sensor = VL6180X(1)
-    for _ in range(10):
-        sensor.read_distance()
+    sensor.read_lux(VL_ALS_GAIN_20)
+    sensor.read_distance()

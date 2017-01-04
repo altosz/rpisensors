@@ -32,6 +32,18 @@ class Eeprom16(object):
             register, value, value)
         return value
 
+    def read_word(self, register):
+        reg = Eeprom16.address_to_bytes(register)
+        self.bus.write_byte_data(self.address, *reg)
+
+        data = self.bus.read_i2c_block_data(self.address, reg[0], 2)
+        value = (data[0] << 8) | data[1]
+
+        self.logger.debug(
+            "Read  [0x%04X] => [0x%02X, 0x%02X] (%d as word)",
+            register, data[0], data[1], value)
+        return value
+
     def write_byte(self, register, data):
         reg = Eeprom16.address_to_bytes(register)
         self.bus.write_i2c_block_data(self.address, reg[0], [reg[1], data])
