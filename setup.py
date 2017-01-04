@@ -7,7 +7,7 @@ def readme():
 
 setup(
     name="rpisensors",
-    version="0.1.0",
+    version="0.2.0",
     description="Raspberry Pi Sensors",
     long_description=readme(),
     classifiers=[
