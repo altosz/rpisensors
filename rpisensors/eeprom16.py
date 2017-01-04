@@ -28,7 +28,7 @@ class Eeprom16(object):
 
         value = self.bus.read_byte(self.address)
         self.logger.debug(
-            "Read [0x%04X] => 0x%02X => %d as byte",
+            "Read  [0x%04X] => 0x%02X (%d as byte)",
             register, value, value)
         return value
 
@@ -36,5 +36,5 @@ class Eeprom16(object):
         reg = Eeprom16.address_to_bytes(register)
         self.bus.write_i2c_block_data(self.address, reg[0], [reg[1], data])
         self.logger.debug(
-            "Write [0x%04X] <= 0x%02X <= %d",
+            "Write [0x%04X] <= 0x%02X (%d as byte)",
             register, data, data)
