@@ -4,9 +4,7 @@
 import logging
 import time
 
-from rpisensors.i2c_device import I2CDevice
-
-from smbus import SMBus
+from rpisensors.eeprom16 import Eeprom16
 
 
 # pylint: disable=C0103
@@ -20,68 +18,6 @@ VL_FRESH_OUT_OF_RESET = 0x016
 
 
 VL_IDENTIFICATION_MODEL_ID_VALUE = 0xB4
-
-
-class SMBusWrapper(object):
-
-    devices = {}
-
-    @staticmethod
-    def open(id):
-        if SMBusWrapper.devices.get(id) is None:
-            bus = SMBusWrapper._open_bus(id)
-            SMBusWrapper.devices[id] = bus
-
-        return SMBusWrapper.devices[id]
-
-    @staticmethod
-    def _open_bus(id):
-        bus = SMBus()
-        bus.open(id)
-        return bus
-
-    @staticmethod
-    def close(id):
-        if SMBusWrapper.devices.get(id) is None:
-            return
-
-        SMBusWrapper.devices[id].close()
-        del SMBusWrapper.device[id]
-
-
-class Eeprom16(object):
-
-    def __init__(self, bus_id, address):
-        self.bus_id = bus_id
-        self.address = address
-        self.bus = SMBusWrapper.open(bus_id)
-
-        self.logger = logging.getLogger(
-            "{0}, I2C[{1}]:{2:#0x}".format(
-                self.__class__.__name__, bus_id, address))
-
-    @staticmethod
-    def address_to_bytes(register):
-        msb = (register >> 8) & 0xFF
-        lsb = register & 0xFF
-        return (msb, lsb)
-
-    def read_byte(self, register):
-        reg = Eeprom16.address_to_bytes(register)
-        self.bus.write_byte_data(self.address, *reg)
-
-        value = self.bus.read_byte(self.address)
-        self.logger.debug(
-            "Read [0x%04X] => 0x%02X => %d as byte",
-            register, value, value)
-        return value
-
-    def write_byte(self, register, data):
-        reg = Eeprom16.address_to_bytes(register)
-        self.bus.write_i2c_block_data(self.address, reg[0], [reg[1], data])
-        self.logger.debug(
-            "Write [0x%04X] <= 0x%02X <= %d",
-            register, data, data)
 
 
 class VL6180X(Eeprom16):
@@ -156,7 +92,7 @@ class VL6180X(Eeprom16):
     def read_distance(self):
         self.write_byte(0x18, 0x01)
 
-        range = None
+        value = None
         i = 0
         while i < 10:
             i += 1
@@ -165,14 +101,14 @@ class VL6180X(Eeprom16):
             range_status = status & 0x07
 
             if range_status == 0x04:
-                range = self.read_byte(0x62)
+                value = self.read_byte(0x62)
                 break
 
             time.sleep(0.2)
 
         self.write_byte(0x15, 0x07)
 
-        return range
+        return value
 
 
 if __name__ == "__main__":
