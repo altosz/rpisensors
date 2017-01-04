@@ -3,12 +3,15 @@
 
 import logging
 
+from rpisensors.smbus_wrapper import SMBusWrapper
+
 
 class I2CDevice(object):
 
-    def __init__(self, bus, address, bus_id='?', little_endian=False):
-        self.bus = bus
+    def __init__(self, bus_id, address, little_endian=False):
+        self.bus_id = bus_id
         self.address = address
+        self.bus = SMBusWrapper.open(bus_id)
 
         if little_endian:
             self._read16 = self._read16_little_endian

@@ -47,8 +47,9 @@ BMP180_READPRESSURECMD = 0x34
 class BMP180(I2CDevice):
 
     def __init__(
-            self, bus, address=BMP180_I2CADDR, mode=BMP180_STANDARD, **kwargs):
-        super(BMP180, self).__init__(bus, address, **kwargs)
+            self, bus_id, address=BMP180_I2CADDR, mode=BMP180_STANDARD):
+        super(BMP180, self).__init__(bus_id, address, little_endian=False)
+
         self.mode = mode
 
         self.verify()
@@ -180,24 +181,15 @@ def pressure_Pa_to_mmHg(pa):
 
 
 if __name__ == "__main__":
-    from smbus import SMBus
-
     logging.basicConfig(
         level=logging.DEBUG,
         format="%(name)-20s %(levelname)-8s %(message)s")
 
-    try:
-        bus = SMBus()
-        bus.open(1)
+    sensor = BMP180(1)
+    temp, pa = sensor.read_temperature_and_pressure()
+    alt = pressure_to_altitude(pa)
+    mmHg = pressure_Pa_to_mmHg(pa)
 
-        sensor = BMP180(bus, bus_id=1, little_endian=False)
-        temp, pa = sensor.read_temperature_and_pressure()
-        alt = pressure_to_altitude(pa)
-        mmHg = pressure_Pa_to_mmHg(pa)
-
-        print "Temperature is %0.2f C" % (temp)
-        print "Pressure is %d Pa (%0.2f mmHg)" % (pa, mmHg)
-        print "Altitude (based on pressure) is %d m" % (alt)
-
-    finally:
-        bus.close()
+    print "Temperature is %0.2f C" % (temp)
+    print "Pressure is %d Pa (%0.2f mmHg)" % (pa, mmHg)
+    print "Altitude (based on pressure) is %d m" % (alt)

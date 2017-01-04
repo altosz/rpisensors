@@ -25,5 +25,8 @@ setup(
     author_email="altos.z@gmail.com",
     license="GPLv2",
     packages=["rpisensors"],
+    install_requires=[
+        'smbus-cffi'
+    ],
     zip_safe=False
 )
